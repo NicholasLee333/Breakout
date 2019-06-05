@@ -1,0 +1,427 @@
+import pygame
+import sys
+import random
+
+# Make the bricks have different widths
+# 5, 10, 15, 20
+# Might not work (Different length each time, might not cover up the platform)
+pygame.mixer.pre_init(22050, -16, 2, 4096)
+
+
+YELLOW = (248, 255, 138)
+GREEN = (72, 244, 55)
+RED = (255, 23, 23)
+BLUE = (62, 131, 245)
+PURPLE = (239, 81, 249)
+white = (255, 255, 255)
+black = (0, 0, 0)
+blue = (75, 143, 196)
+gray = (178, 201, 219)
+othergray = (178, 232, 237)
+otherblue = (0, 234, 255)
+darkgray = (97, 97, 97)
+purple1 = (152, 131, 243)
+blue2 = (37, 247, 255)
+pink3 = (249, 69, 243)
+yellow4 = (255, 216, 0)
+green01 = (0, 255, 90)
+orange02 = (255, 144, 0)
+
+WIN_W = 800
+WIN_H = 500
+
+WHITE = (255, 255, 255)
+
+class Game:
+    def __init__(self):
+        self.screen = pygame.display.set_mode((WIN_W, WIN_H), pygame.SRCALPHA)
+        self.clock = pygame.time.Clock()
+        self.play = self.intro = True
+        self.outro = False
+        self.live = 3
+        self.outtext = Text(60, "----Click me to rematch----", WIN_W / 2.8 - 140, WIN_H - 150)
+
+    def blink(self):
+        if pygame.time.get_ticks() % 1000 < 500 and self.outro == True:
+            self.screen.blit(self.outtext.image, self.outtext.rect)
+
+
+class Text:
+    def __init__(self, size, text, xpos, ypos):
+        self.font = pygame.font.SysFont("Britannic Bold", size)
+        self.image = self.font.render(text, 1, GREEN)
+        self.rect = self.image.get_rect()
+        self.rect = self.rect.move(xpos, ypos)
+
+class Brick(pygame.sprite.Sprite):
+    def __init__(self,x, y, aa):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load(self.set_image(aa)).convert_alpha()
+        self.image = pygame.transform.scale(self.image, (50, 25))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.point = 1
+        self.health = random.randint(1,2)
+
+    def set_image(self, aa):
+        a = random.choice(aa)
+        return a
+
+
+class Paddle:
+    def __init__(self):
+        self.width = 150
+        self.height = 20
+        self.speed = 8
+        self.image = pygame.image.load("images/Baguette.png").convert_alpha()
+        self.image = pygame.transform.scale(self.image, (self.width, self.height)).convert_alpha()
+        self.rect = self.image.get_rect()
+        self.rect.x = 400 - self.width/2
+        self.rect.y = 420
+        self.score = 0
+
+    def update(self, group, ball, run, music_ingame):
+        key = pygame.key.get_pressed()
+
+        if key[pygame.K_a] or key[pygame.K_LEFT]:
+            self.rect.x -= self.speed
+        if key[pygame.K_d] or key[pygame.K_RIGHT]:
+            self.rect.x += self.speed
+
+        if self.rect.left <= 0:
+            self.rect.left = 0
+        if self.rect.right >= WIN_W:
+            self.rect.right = WIN_W
+
+        collisions = pygame.sprite.spritecollide(self, group, True)
+        for p in collisions:
+            if p.type == 1:
+                print("1")
+                ball.changespeed = False
+            if p.type == 2:
+                print("2")
+                x = ball.rect.x
+                y = ball.rect.y
+                ball.image = pygame.image.load("images/Balls&Lee_Ball.png").convert_alpha()
+                ball.image = pygame.transform.scale(ball.image, (50, 60)).convert_alpha()
+                ball.rect = ball.image.get_rect()
+                ball.rect = ball.rect.move(x, y)
+                # Win condition
+        if self.score >= 160:
+            music_ingame.stop()
+            run.play = False
+            run.outro = True
+
+                # death
+        if run.live <= 0:
+            music_ingame.stop()
+            run.play = False
+            run.outro = True
+
+class Pill(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        type = random.randrange(1, 3)
+        self.speed = 5
+        self.image = pygame.Surface((4, 20)).convert()
+        self.rect = self.image.get_rect()
+        self.rect = self.rect.move((random.randrange(0, WIN_W), 0))
+        self.type = type
+
+        if self.type == 1:
+            self.image.fill(purple1)
+        if self.type == 2:
+            self.image.fill(blue2)
+
+    def update(self):
+        self.rect = self.rect.move((0, self.speed))
+        if self.rect.y > WIN_H:
+            self.kill()
+
+
+class Ball(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        changespeed = True
+        self.image = pygame.image.load("images/Balls&Lee_Ball.png").convert_alpha()
+        self.image = pygame.transform.scale(self.image, (15, 15))
+        self.rect = self.image.get_rect()
+        self.rect.x = WIN_W/2 - self.rect.width/2
+        self.rect.y = 350
+        self.speed = (0, 3)
+        self.changespeed = changespeed
+
+    def update(self, paddle, brick_group, run, s_counter, music_death, loopcounter2):
+        if self.rect.top <= 0:
+            self.speed = (self.speed[0], -self.speed[1])
+        if self.rect.right >= WIN_W:
+            self.speed = (-self.speed[0], self.speed[1])
+        if self.rect.left <= 0:
+            self.speed = (-self.speed[0], self.speed[1])
+
+            # bounce off the paddles
+        if self.rect.bottom >= paddle.rect.top and self.rect.bottom <= paddle.rect.top + 2 and self.rect.right >= paddle.rect.left-3 and self.rect.left <= paddle.rect.right-130+3:
+            self.speed = (-3.5, -2.5)
+        elif self.rect.bottom >= paddle.rect.top and self.rect.bottom <= paddle.rect.top + 2 and self.rect.right >= paddle.rect.left+20-3 and self.rect.left <= paddle.rect.right-110+3:
+            self.speed = (-3, -3)
+        elif self.rect.bottom >= paddle.rect.top and self.rect.bottom <= paddle.rect.top + 2 and self.rect.right >= paddle.rect.left+40-3 and self.rect.left <= paddle.rect.right-90+3:
+            self.speed = (-2.5, -3.5)
+        elif self.rect.bottom >= paddle.rect.top and self.rect.bottom <= paddle.rect.top + 2 and self.rect.right >= paddle.rect.left+60-3 and self.rect.left <= paddle.rect.right-60+3:
+            if self.speed[0] >= 0:
+                self.speed = (2, -3.75)
+            elif self.speed[0] <= 0:
+                self.speed = (-2, -3.75)
+        elif self.rect.bottom >= paddle.rect.top and self.rect.bottom <= paddle.rect.top + 2 and self.rect.right >= paddle.rect.left+90-3 and self.rect.left <= paddle.rect.right-40+3:
+            self.speed = (2.5, -3.5)
+        elif self.rect.bottom >= paddle.rect.top and self.rect.bottom <= paddle.rect.top + 2 and self.rect.right >= paddle.rect.left+110-3 and self.rect.left <= paddle.rect.right-20+3:
+            self.speed = (3, -3)
+        elif self.rect.bottom >= paddle.rect.top and self.rect.bottom <= paddle.rect.top + 2 and self.rect.right >= paddle.rect.left+130-3 and self.rect.left <= paddle.rect.right+3:
+            self.speed = (3.5, -2.5)
+
+        if self.rect.bottom >= WIN_H or self.rect.bottom < 10:
+            music_death.play(1)
+            self.rect.x = WIN_W/2 - self.rect.width/2
+            self.rect.y = 350
+            self.speed = (0, 3)
+            paddle.rect.x = 400 - paddle.width / 2
+            run.live -= 1
+            s_counter.image = s_counter.font.render(str(run.live), 1, GREEN)
+        self.rect = self.rect.move(self.speed)
+
+            # bounce off the bricks
+        for b in brick_group:
+            # brick top
+            if self.rect.bottom >= b.rect.top and self.rect.bottom <= b.rect.top + 4 and self.rect.right >= b.rect.left - 2 and self.rect.left <= b.rect.right + 2:
+                b.health -= 1
+                if loopcounter2 >0 :
+                    b.health = 0
+                if b.health ==0:
+                    b.kill()
+                    paddle.score += b.point
+                if self.changespeed == True:
+                    self.speed = (self.speed[0], -abs(self.speed[1]))
+
+            # brick bottom
+            elif self.rect.top >= b.rect.bottom - 4 and self.rect.top <= b.rect.bottom and self.rect.right >= b.rect.left - 2 and self.rect.left <= b.rect.right + 2:
+
+                b.health -= 1
+                if loopcounter2 >0 :
+                    b.health = 0
+                if b.health ==0:
+                    b.kill()
+                    paddle.score += b.point
+                if self.changespeed == True:
+                    self.speed = (self.speed[0], abs(self.speed[1]))
+
+            # brick right
+            elif self.rect.left >= b.rect.right - 2 and self.rect.left <= b.rect.right + 2 and self.rect.bottom >= b.rect.top + 2 and self.rect.top <= b.rect.bottom - 2:
+
+                b.health -= 1
+                if loopcounter2 >0 :
+                    b.health = 0
+                if b.health ==0:
+                    b.kill()
+                    paddle.score += b.point
+                if self.changespeed == True:
+                    self.speed = (abs(self.speed[0]), self.speed[1])
+
+            # brick left
+            elif self.rect.right >= b.rect.left - 2 and self.rect.right <= b.rect.left + 2 and self.rect.bottom >= b.rect.top + 2 and self.rect.top <= b.rect.bottom - 2:
+
+                b.health -= 1
+                if loopcounter2 >0 :
+                    b.health = 0
+                if b.health ==0:
+                    b.kill()
+                    paddle.score += b.point
+                if self.changespeed == True:
+                    self.speed = (-abs(self.speed[0]), self.speed[1])
+
+
+def main():
+
+    loopcounter1 = 0
+    loopcounter2 = 0
+
+    pygame.init()
+    pygame.display.set_caption('Bricks & Lee')
+    run = Game()
+
+    intro_back = pygame.image.load("images/Bricks&Lee_Intro.png").convert()
+    intro_back = pygame.transform.scale(intro_back, (WIN_W, WIN_H))
+    intro_rect = intro_back.get_rect()
+
+
+    game_bg = ["images/THANOS_LEE.png", "images/GeneLee.png", "images/Bricks&Lee_Game.png", "images/LeeYangYang.png", "images/PsyLee.png"]
+    game_choice = random.choice(game_bg)
+    game_back = pygame.image.load(game_choice).convert()
+    game_back = pygame.transform.scale(game_back, (WIN_W, WIN_H))
+    game_rect = game_back.get_rect()
+
+    ending2_back = pygame.image.load("images/ending2.png").convert()
+    ending2_back = pygame.transform.scale(ending2_back, (WIN_W, WIN_H))
+    ending2_rect = ending2_back.get_rect()
+
+    ending_back = pygame.image.load("images/Bricks&Lee_Ending.png").convert()
+    ending_back = pygame.transform.scale(ending_back, (WIN_W, WIN_H))
+    ending_rect = ending_back.get_rect()
+
+    if game_choice == "images/LeeYangYang.png":
+        music_ingame = pygame.mixer.Sound("sounds/1.ogg")
+    if game_choice == "images/THANOS_LEE.png":
+        music_ingame = pygame.mixer.Sound("sounds/The Avengers (1).ogg")
+    if game_choice == "images/Bricks&Lee_Game.png":
+        music_ingame = pygame.mixer.Sound("sounds/Lil Nas X - Old Town Road (feat. Billy Ray Cyrus) [Remix] (1).ogg")
+    if game_choice == "images/GeneLee.png":
+        music_ingame = pygame.mixer.Sound("sounds/Aladdin - A Whole New World [High Quality].ogg")
+    if game_choice == "images/PsyLee.png":
+        music_ingame = pygame.mixer.Sound("sounds/Psy.ogg")
+
+
+
+    music_intro = pygame.mixer.Sound("sounds/Game Of Thrones theme (audio) (1).ogg")
+
+    music_death = pygame.mixer.Sound("sounds/Roblox Death Sound - Sound Effect (HD) (1).ogg")
+
+    music_end1 = pygame.mixer.Sound("sounds/Sheck Wes - Mo Bamba (Official Music Video) (1).ogg")
+
+    music_end2 = pygame.mixer.Sound("sounds/Deja Vu POWER METAL COVER by RichaadEB, Jonathan Young & FamilyJules (1).ogg")
+
+    text_l = Text(20, "YOU GOT     LIVES LEFT", WIN_W / 2.8 - 280, WIN_H - 20)
+    s_counter = Text(20, str(run.live), WIN_W / 2.8 - 215, WIN_H - 20)
+
+    ball = Ball()
+    paddle = Paddle()
+
+    brick_group = pygame.sprite.Group()
+    pill_group = pygame.sprite.Group()
+
+    list_p = ["images/phone_blue.png", "images/phone_green.png", "images/phone_orange.png", "images/phone_pink.png",
+              "images/phone_purple.png", "images/phone_reallyblue.png", "images/phone_red.png",
+              "images/phone_yellow.png"]
+
+    list_b = ["images/Brick_Blue.png", "images/Brick_Green.png", "images/Brick_Indigo.png", "images/Brick_Pink.png",
+              "images/Brick_Purple.png", "images/Brick_Red.png", "images/Brick_Yellow.png"]
+    a = [list_p, list_b]
+    aa = random.choice(a)
+
+    level = [
+        "BBBBBBBBBBBBBBBB",
+        "BBBBBBBBBBBBBBBB",
+        "BBBBBBBBBBBBBBBB",
+        "BBBBBBBBBBBBBBBB",
+        "BBBBBBBBBBBBBBBB",
+        "BBBBBBBBBBBBBBBB",
+        "BBBBBBBBBBBBBBBB",
+        "BBBBBBBBBBBBBBBB",
+        "BBBBBBBBBBBBBBBB",
+        "BBBBBBBBBBBBBBBB",
+        "                ",
+        "                ",
+        "                ",
+        "                ",
+        "                ",
+        "                ",
+        "                ",
+        "                ",
+        "                ",
+        "                ",]
+
+    x = y = 0
+
+    for row in level:
+        for col in row:
+            if col == "B":
+                b = Brick(x, y, aa)
+                brick_group.add(b)
+            x += 50
+        y += 25
+        x = 0
+
+    while run.intro:
+        music_intro.play(-1)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                music_intro.stop()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN or pygame.key.get_pressed()[pygame.K_RETURN] != 0:
+                music_intro.stop()
+                run.intro = False
+
+        pygame.display.flip()
+
+        run.screen.blit(intro_back, intro_rect)
+
+    while run.play:
+        music_ingame.play(-1)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                music_ingame.stop()
+                sys.exit()
+
+        run.screen.blit(game_back, game_rect)
+
+        chance = random.randrange(0, 500)
+        if chance == 1:
+            pill = Pill()
+            pill_group.add(pill)
+
+        pill_group.update()
+        paddle.update(pill_group, ball, run, music_ingame)
+        ball.update(paddle, brick_group, run, s_counter, music_death, loopcounter2)
+
+        run.clock.tick(60)
+        run.screen.blit(text_l.image, text_l.rect)
+        run.screen.blit(s_counter.image, s_counter.rect)
+
+        run.screen.blit(paddle.image, paddle.rect)
+        brick_group.draw(run.screen)
+        pill_group.draw(run.screen)
+        run.screen.blit(ball.image, ball.rect)
+
+        if ball.changespeed == False:
+            loopcounter1 += 1
+
+        if ball.rect.width == 50:
+            loopcounter2 += 1
+            print (str(loopcounter2))
+
+        if loopcounter2 >= 900:
+            ball.rect.width = 15
+            ball.rect.height = 15
+            loopcounter2 = 0
+            ball.image = pygame.transform.scale(ball.image, (15, 15)).convert_alpha()
+
+        if loopcounter1 >= 300:
+            ball.changespeed = True
+            loopcounter1 = 0
+
+        pygame.display.flip()
+
+    while run.outro:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                sys.exit()
+                music_end1.stop()
+                music_end2.stop()
+            if event.type == pygame.MOUSEBUTTONDOWN or pygame.key.get_pressed()[pygame.K_RETURN] != 0:
+                music_end1.stop()
+                music_end2.stop()
+                main()
+
+
+        if paddle.score >= 160:
+            run.screen.blit(ending_back, ending_rect)
+            music_end1.play(-1)
+        if run.live == 0:
+            music_end2.play(-1)
+            run.screen.blit(ending2_back, ending2_rect)
+
+        run.blink()
+
+        pygame.display.flip()
+
+
+if __name__ == "__main__":
+    main()
